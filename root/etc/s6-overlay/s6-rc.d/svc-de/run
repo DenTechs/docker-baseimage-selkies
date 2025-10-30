@@ -9,10 +9,28 @@ while true; do
 done
 
 # set sane resolution before starting apps
-if ! s6-setuidgid abc xrandr | grep -q "1024x768"; then
-  s6-setuidgid abc xrandr --newmode "1024x768" 63.50  1024 1072 1176 1328  768 771 775 798 -hsync +vsync
-  s6-setuidgid abc xrandr --addmode screen "1024x768"
-  s6-setuidgid abc xrandr --output screen --mode "1024x768" --dpi 96
+# Use custom resolution if environment variables are set, otherwise default to 1024x768
+RESOLUTION_WIDTH=${SELKIES_MANUAL_WIDTH:-1024}
+RESOLUTION_HEIGHT=${SELKIES_MANUAL_HEIGHT:-768}
+RESOLUTION="${RESOLUTION_WIDTH}x${RESOLUTION_HEIGHT}"
+
+if ! s6-setuidgid abc xrandr | grep -q "$RESOLUTION"; then
+  if [ "$RESOLUTION" = "1024x768" ]; then
+    # Use predefined timing parameters for default resolution
+    s6-setuidgid abc xrandr --newmode "$RESOLUTION" 63.50  1024 1072 1176 1328  768 771 775 798 -hsync +vsync
+  else
+    # Generate timing parameters for custom resolution using cvt
+    MODELINE=$(s6-setuidgid abc cvt "$RESOLUTION_WIDTH" "$RESOLUTION_HEIGHT" | grep "Modeline" | sed 's/^.*Modeline //')
+    if [ -n "$MODELINE" ]; then
+      s6-setuidgid abc xrandr --newmode $MODELINE
+    else
+      echo "Warning: Could not generate modeline for ${RESOLUTION}, falling back to 1024x768"
+      RESOLUTION="1024x768"
+      s6-setuidgid abc xrandr --newmode "$RESOLUTION" 63.50  1024 1072 1176 1328  768 771 775 798 -hsync +vsync
+    fi
+  fi
+  s6-setuidgid abc xrandr --addmode screen "$RESOLUTION"
+  s6-setuidgid abc xrandr --output screen --mode "$RESOLUTION" --dpi 96
 fi
 
 # set xresources
